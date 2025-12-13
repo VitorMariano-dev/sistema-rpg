@@ -2,8 +2,36 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { CustomField, FieldType, SessionLog, ResourceValue } from "../types";
 
 // Initialize the Gemini AI client
-// Note: We use process.env.API_KEY as per the requirements.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Safely try to retrieve API Key from Vite (import.meta.env) or Node/Process env
+// This prevents "Cannot read properties of undefined (reading 'VITE_API_KEY')" errors
+const getApiKey = () => {
+  try {
+    const meta = import.meta as any;
+    if (meta && meta.env && meta.env.VITE_API_KEY) {
+      return meta.env.VITE_API_KEY;
+    }
+  } catch (e) {
+    // Ignore errors accessing import.meta
+  }
+
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    // Ignore errors accessing process
+  }
+
+  return undefined;
+};
+
+const apiKey = getApiKey();
+
+if (!apiKey) {
+  console.warn("API Key is missing. AI features will not work.");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -11,6 +39,7 @@ const MODEL_NAME = 'gemini-2.5-flash';
  * Suggests a list of custom fields based on a campaign theme.
  */
 export const suggestCampaignFields = async (theme: string): Promise<CustomField[]> => {
+  if (!apiKey) return [];
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -54,6 +83,7 @@ export const suggestCampaignFields = async (theme: string): Promise<CustomField[
  * Generates a narrative summary of a session log.
  */
 export const summarizeSessionLog = async (logData: Record<string, any>, fields: CustomField[]): Promise<string> => {
+  if (!apiKey) return "Erro: Chave de API não configurada.";
   try {
     // Construct a readable representation of the data
     const formattedData = fields.map(field => {
@@ -84,6 +114,7 @@ export const summarizeSessionLog = async (logData: Record<string, any>, fields: 
  * Generates NPC descriptions (True/GM and Public/Player).
  */
 export const generateNPCDescriptions = async (npcName: string, context: string): Promise<{ gmDescription: string, publicDescription: string }> => {
+  if (!apiKey) return { gmDescription: "Configure a API Key.", publicDescription: "Configure a API Key." };
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -122,6 +153,7 @@ export const generateNPCDescriptions = async (npcName: string, context: string):
  * Generates content for an in-game document/scroll/book.
  */
 export const generateDocumentContent = async (keywords: string, type: 'DOC' | 'MAP' | 'OTHER' | 'DISCORD'): Promise<string> => {
+  if (!apiKey) return "Configure a API Key para gerar conteúdo.";
   try {
     let prompt = `Escreva o texto curto (máx 200 palavras) de um documento de RPG de fantasia (como uma carta, um decreto real, ou página de diário). 
     Use as seguintes palavras-chaves/ideias: "${keywords}".
