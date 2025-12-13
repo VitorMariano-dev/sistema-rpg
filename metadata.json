@@ -1,0 +1,5 @@
+{
+  "name": "Crônicas de Mesa",
+  "description": "Um gerenciador de campanhas de RPG dinâmico onde Mestres definem a estrutura do mundo e jogadores registram suas aventuras, alimentado por IA para construção de mundo e resumos de sessões.",
+  "requestFramePermissions": []
+}
