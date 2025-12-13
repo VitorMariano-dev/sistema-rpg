@@ -8,9 +8,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@google/genai": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@google/genai": "^0.2.1",
     "lucide-react": "^0.300.0",
     "recharts": "^2.10.3"
   },
