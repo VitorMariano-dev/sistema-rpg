@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Save, Loader2, Sparkles, Heart } from 'lucide-react';
 import { CampaignConfig, SessionLog, FieldType, ResourceValue, CharacterSheetState, SessionData } from '../types';
 import { summarizeSessionLog } from '../services/geminiService';
@@ -7,11 +7,12 @@ import { updateResource, parseNumberInput } from '../utils';
 
 interface SessionLoggerProps {
   config: CampaignConfig;
-  onSaveLog: (log: SessionLog) => void;
+  logs: SessionLog[];
+  onSaveLog: (log: SessionLog) => Promise<void>;
   currentUser: string;
 }
 
-const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, currentUser }) => {
+const SessionLogger: React.FC<SessionLoggerProps> = ({ config, logs, onSaveLog, currentUser }) => {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [characterState, setCharacterState] = useState<CharacterSheetState>({
       inventory: [],
@@ -32,36 +33,36 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
   // For now, let's keep it clean as we don't block saving on empty fields here.
 
   // Load previous state on mount
+  // Restaura a ficha do último registro do jogador uma única vez (os registros chegam do
+  // banco depois da tela abrir, e atualizações em tempo real não devem apagar o que ele digita)
+  const restoredRef = useRef(false);
   useEffect(() => {
-      const allLogsStr = localStorage.getItem('rpg_logs');
-      if (allLogsStr) {
-          const allLogs: SessionLog[] = JSON.parse(allLogsStr);
-          // Filter logs by current user and sort by date descending
-          const userLogs = allLogs
-            .filter(l => (l.author || 'Anônimo') === currentUser)
-            .sort((a, b) => b.timestamp - a.timestamp);
-          
-          if (userLogs.length > 0) {
-              const lastData = userLogs[0].data;
-              
-              // Restore Fields
-              const restoredFields: Record<string, any> = {};
-              config.fields.forEach(f => {
-                  if (lastData[f.id] !== undefined) {
-                      restoredFields[f.id] = lastData[f.id];
-                  }
-              });
-              setFormData(restoredFields);
+      if (restoredRef.current) return;
+      const userLogs = logs
+        .filter(l => (l.author || 'Anônimo') === currentUser)
+        .sort((a, b) => b.timestamp - a.timestamp);
+      if (userLogs.length === 0) return;
+      restoredRef.current = true;
 
-              // Restore Character Sheet (Inventory/Equipment)
-              if (lastData.characterSheet) {
-                  setCharacterState(lastData.characterSheet as CharacterSheetState);
-              }
+      const lastData = userLogs[0].data;
+
+      // Restore Fields
+      const restoredFields: Record<string, any> = {};
+      config.fields.forEach(f => {
+          if (lastData[f.id] !== undefined) {
+              restoredFields[f.id] = lastData[f.id];
           }
+      });
+      setFormData(restoredFields);
+
+      // Restore Character Sheet (Inventory/Equipment)
+      if (lastData.characterSheet) {
+          setCharacterState(lastData.characterSheet as CharacterSheetState);
       }
-  }, [currentUser, config.fields]);
+  }, [currentUser, config.fields, logs]);
 
   const handleInputChange = (id: string, value: any) => {
+    restoredRef.current = true;
     setFormData(prev => ({
       ...prev,
       [id]: value
@@ -69,6 +70,7 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
   };
 
   const handleResourceChange = (id: string, field: 'current' | 'max', value: string) => {
+    restoredRef.current = true;
     setFormData(prev => ({
         ...prev,
         [id]: updateResource(prev[id] as ResourceValue | undefined, field, Number(value))
@@ -103,7 +105,14 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
       author: currentUser
     };
 
-    onSaveLog(newLog);
+    try {
+        await onSaveLog(newLog);
+    } catch (e) {
+        alert(`Não foi possível salvar a sessão: ${(e as Error).message}`);
+        return;
+    }
+    // Marca como restaurado para não sobrescrever o formulário com o registro recém-salvo
+    restoredRef.current = true;
     alert(summaryError
         ? `Sessão registrada, mas sem resumo da IA: ${summaryError}`
         : "Sessão registrada com sucesso!");

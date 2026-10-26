@@ -40,13 +40,9 @@ const log = (author: string | undefined, timestamp: number, data: SessionLog['da
 });
 
 describe('getKnownPlayers', () => {
-  it('junta jogadores cadastrados e autores de registros, sem o Mestre', () => {
-    const users = [
-      { username: 'mestre', role: 'GM' as const },
-      { username: 'ana', role: 'PLAYER' as const },
-    ];
-    const logs = [log('bruno', 1, {}), log(undefined, 2, {})];
-    expect(getKnownPlayers(logs, users)).toEqual(['ana', 'Anônimo', 'bruno']);
+  it('junta membros da campanha e autores de registros, sem repetir', () => {
+    const logs = [log('bruno', 1, {}), log('ana', 2, {}), log(undefined, 3, {})];
+    expect(getKnownPlayers(logs, ['ana'])).toEqual(['ana', 'Anônimo', 'bruno']);
   });
 });
 

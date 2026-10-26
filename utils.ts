@@ -1,4 +1,4 @@
-import { CustomField, FieldType, ResourceValue, SessionLog, User } from './types';
+import { CustomField, FieldType, ResourceValue, SessionLog } from './types';
 
 /**
  * Atualiza um recurso (Vida/Mana). O valor atual só é limitado ao máximo quando
@@ -33,21 +33,12 @@ export const parseNumberInput = (raw: string): number | '' =>
 
 export const getLogAuthor = (log: SessionLog) => log.author || 'Anônimo';
 
-export const getRegisteredUsers = (): User[] => {
-  try {
-    return JSON.parse(localStorage.getItem('rpg_users') || '[]');
-  } catch {
-    return [];
-  }
-};
-
 /**
- * Jogadores conhecidos: contas de jogador cadastradas e autores de registros,
+ * Jogadores conhecidos: membros da campanha e autores de registros,
  * para o Mestre poder liberar NPCs e links antes da primeira sessão.
  */
-export const getKnownPlayers = (logs: SessionLog[], users: User[] = getRegisteredUsers()): string[] => {
-  const players = new Set<string>();
-  users.filter(u => (u.role || 'PLAYER') === 'PLAYER').forEach(u => players.add(u.username));
+export const getKnownPlayers = (logs: SessionLog[], members: string[] = []): string[] => {
+  const players = new Set<string>(members);
   logs.forEach(log => players.add(getLogAuthor(log)));
   return Array.from(players).sort((a, b) => a.localeCompare(b));
 };

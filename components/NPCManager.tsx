@@ -7,10 +7,11 @@ import { getKnownPlayers } from '../utils';
 interface NPCManagerProps {
   config: CampaignConfig;
   onUpdateConfig: (newConfig: CampaignConfig) => void;
-  logs: SessionLog[]; 
+  logs: SessionLog[];
+  players?: string[]; // Membros da campanha (jogadores)
 }
 
-const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs }) => {
+const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs, players = [] }) => {
   // Form State
   const [name, setName] = useState('');
   const [description, setDescription] = useState(''); // GM Description
@@ -22,7 +23,7 @@ const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs })
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Derive unique players list for visibility toggling
-  const availablePlayers = getKnownPlayers(logs);
+  const availablePlayers = getKnownPlayers(logs, players);
 
   // Helper for Required Asterisk
   const Req = () => <span className="text-red-500 ml-1">*</span>;

@@ -8,17 +8,18 @@ interface FieldBuilderProps {
   config: CampaignConfig;
   onUpdateConfig: (newConfig: CampaignConfig) => void;
   logs?: SessionLog[]; // Necessário para listar jogadores para permissões
+  players?: string[]; // Membros da campanha (jogadores)
 }
 
 type Tab = 'FIELDS' | 'LINKS' | 'CURRENCY';
 
-const FieldBuilder: React.FC<FieldBuilderProps> = ({ config, onUpdateConfig, logs = [] }) => {
+const FieldBuilder: React.FC<FieldBuilderProps> = ({ config, onUpdateConfig, logs = [], players = [] }) => {
   const [activeTab, setActiveTab] = useState<Tab>('FIELDS');
   const [isGenerating, setIsGenerating] = useState(false);
   const [promptTheme, setPromptTheme] = useState('');
   
   // Players list
-  const availablePlayers = getKnownPlayers(logs);
+  const availablePlayers = getKnownPlayers(logs, players);
 
   // Field Form State
   const [newFieldLabel, setNewFieldLabel] = useState('');

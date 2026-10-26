@@ -2,7 +2,13 @@
 
 Gerenciador de campanhas de RPG: o Mestre define os campos da ficha, NPCs, links, documentos e moedas; os jogadores registram suas sessões com inventário e equipamentos. A IA (Google Gemini) sugere campos, gera descrições de NPCs, documentos e resumos de sessão.
 
-> Os dados ainda ficam no `localStorage` do navegador, então Mestre e jogadores precisam usar o mesmo navegador por enquanto. A migração para um backend (Supabase) está planejada.
+Os dados ficam no [Supabase](https://supabase.com): cada pessoa tem sua conta, quem cria uma campanha é o Mestre dela, e os jogadores entram com o código de convite que aparece no painel do Mestre. As regras de acesso do banco garantem que o jogador só veja os NPCs que descobriu (nunca a descrição verdadeira) e os links liberados para ele.
+
+## Configurar o Supabase (uma vez)
+
+1. No painel do projeto, abra **SQL Editor › New query**, cole o conteúdo de [`supabase/migrations/001_inicial.sql`](supabase/migrations/001_inicial.sql) e clique em **Run**.
+2. Em **Authentication › URL Configuration**, coloque o endereço do site no Netlify em **Site URL** (é para onde o link de confirmação de e-mail leva).
+3. Opcional: em **Authentication › Sign In / Providers › Email**, desligue **Confirm email** se não quiser exigir confirmação por e-mail no cadastro.
 
 ## Rodar localmente
 
@@ -10,12 +16,13 @@ Gerenciador de campanhas de RPG: o Mestre define os campos da ficha, NPCs, links
 
 1. Instale as dependências:
    `npm install`
-2. Crie um arquivo `.env.local` com a sua chave do Gemini:
-   `GEMINI_API_KEY=sua-chave`
+2. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` e `GEMINI_API_KEY`.
 3. Rode o app:
    `npm run dev`
 
-Sem a chave o app funciona normalmente; só os recursos de IA mostram um aviso.
+Sem a chave do Gemini o app funciona normalmente; só os recursos de IA mostram um aviso.
+
+Se você usou a versão antiga (dados no navegador), a tela de campanhas oferece **Importar como Mestre** para levar campos, NPCs, links e moedas para o banco.
 
 ## Comandos
 
@@ -33,4 +40,4 @@ As chamadas ao Gemini são feitas no servidor, pela função `netlify/functions/
 
 ## Deploy no Netlify
 
-O `netlify.toml` já configura o build e a função. No painel do Netlify, em **Site configuration › Environment variables**, defina `GEMINI_API_KEY`.
+O `netlify.toml` já configura o build e a função. No painel do Netlify, em **Site configuration › Environment variables**, defina `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` e `GEMINI_API_KEY`, e faça um novo deploy.
