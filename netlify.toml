@@ -2,6 +2,12 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# A função do Gemini responde em /api/gemini (definido no próprio arquivo).
+# O redirect abaixo só pega o resto, para o roteamento da SPA.
 [[redirects]]
   from = "/*"
   to = "/index.html"

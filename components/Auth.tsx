@@ -1,48 +1,57 @@
 import React, { useState } from 'react';
-import { Shield, UserPlus, LogIn, Sword, Crown } from 'lucide-react';
-import { User, UserRole } from '../types';
+import { UserPlus, LogIn, Sword, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-interface AuthProps {
-  onLogin: (user: User) => void;
-}
-
-const Auth: React.FC<AuthProps> = ({ onLogin }) => {
+// A sessão é tratada no App via supabase.auth.onAuthStateChange
+const Auth: React.FC = () => {
   const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('PLAYER');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInfo('');
 
-    if (!username.trim() || !password.trim()) {
+    if (!email.trim() || !password.trim() || (isRegistering && !username.trim())) {
       setError('Preencha todos os campos.');
       return;
     }
 
-    const storedUsersStr = localStorage.getItem('rpg_users');
-    const users: User[] = storedUsersStr ? JSON.parse(storedUsersStr) : [];
-
-    if (isRegistering) {
-      if (users.find(u => u.username === username)) {
-        setError('Usuário já existe.');
-        return;
-      }
-      const newUser: User = { username, password, role };
-      users.push(newUser);
-      localStorage.setItem('rpg_users', JSON.stringify(users));
-      onLogin(newUser);
-    } else {
-      const user = users.find(u => u.username === username && u.password === password);
-      if (user) {
-        // Fallback para usuários antigos sem role definida
-        if (!user.role) user.role = 'PLAYER'; 
-        onLogin(user);
+    setLoading(true);
+    try {
+      if (isRegistering) {
+        const name = username.trim();
+        if (name.length < 2 || name.length > 32) {
+          setError('O nome de usuário deve ter entre 2 e 32 caracteres.');
+          return;
+        }
+        const { data: available } = await supabase.rpc('username_available', { name });
+        if (available === false) {
+          setError('Nome de usuário já existe.');
+          return;
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { username: name }, emailRedirectTo: window.location.origin },
+        });
+        if (error) {
+          setError(translateAuthError(error.message));
+        } else if (!data.session) {
+          setInfo('Conta criada! Confirme o cadastro pelo link enviado ao seu e-mail e depois entre.');
+          setIsRegistering(false);
+        }
       } else {
-        setError('Credenciais inválidas.');
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (error) setError(translateAuthError(error.message));
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -63,16 +72,31 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
           <div>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Nome de Usuário</label>
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">E-mail</label>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              placeholder="Ex: Gandalf"
+              placeholder="voce@exemplo.com"
             />
           </div>
-          
+
+          {isRegistering && (
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Nome de Usuário</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                placeholder="Ex: Gandalf"
+              />
+              <p className="text-xs text-slate-600 mt-1">É assim que o Mestre e os outros jogadores vão te ver.</p>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1">Senha</label>
             <input
@@ -80,46 +104,27 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              autoComplete={isRegistering ? 'new-password' : 'current-password'}
               placeholder="******"
             />
           </div>
 
-          {isRegistering && (
-             <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg">
-                <label className="block text-xs uppercase tracking-wider text-slate-500 mb-2">Eu sou um:</label>
-                <div className="flex gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setRole('PLAYER')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded text-sm transition-colors ${role === 'PLAYER' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}
-                    >
-                        <Shield className="w-4 h-4" /> Jogador
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setRole('GM')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded text-sm transition-colors ${role === 'GM' ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}
-                    >
-                        <Crown className="w-4 h-4" /> Mestre
-                    </button>
-                </div>
-             </div>
-          )}
-
+          {info && <p className="text-emerald-400 text-sm text-center bg-emerald-950/20 p-2 rounded border border-emerald-900/50">{info}</p>}
           {error && <p className="text-red-500 text-sm text-center bg-red-950/20 p-2 rounded border border-red-900/50">{error}</p>}
 
           <button
             type="submit"
-            className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
+            disabled={loading}
+            className="w-full disabled:opacity-60 bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
           >
-            {isRegistering ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isRegistering ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
             {isRegistering ? 'Criar Conta' : 'Entrar no Portal'}
           </button>
         </form>
 
         <div className="mt-6 text-center relative z-10">
           <button
-            onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
+            onClick={() => { setIsRegistering(!isRegistering); setError(''); setInfo(''); }}
             className="text-sm text-slate-500 hover:text-amber-500 transition-colors"
           >
             {isRegistering ? 'Já possui uma conta? Entrar' : 'Novo por aqui? Criar conta'}
@@ -128,6 +133,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       </div>
     </div>
   );
+};
+
+const translateAuthError = (message: string) => {
+  if (/invalid login credentials/i.test(message)) return 'E-mail ou senha incorretos.';
+  if (/email not confirmed/i.test(message)) return 'Confirme seu e-mail antes de entrar.';
+  if (/already registered/i.test(message)) return 'Este e-mail já tem uma conta.';
+  if (/password should be at least/i.test(message)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  return message;
 };
 
 export default Auth;

@@ -6,11 +6,12 @@ import InventorySheet from './InventorySheet';
 
 interface SessionLoggerProps {
   config: CampaignConfig;
-  onSaveLog: (log: SessionLog) => void;
+  onSaveLog: (log: SessionLog) => Promise<void>;
   currentUser: string;
+  logs: SessionLog[];
 }
 
-const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, currentUser }) => {
+const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, currentUser, logs }) => {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [characterState, setCharacterState] = useState<CharacterSheetState>({
       inventory: [],
@@ -30,35 +31,34 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
   // But let's add the visual cue if we were to enforce it. 
   // For now, let's keep it clean as we don't block saving on empty fields here.
 
-  // Load previous state on mount
+  // Load previous state on mount.
+  // Depende só dos ids dos campos para não apagar o que o jogador está digitando
+  // quando a campanha é recarregada em tempo real.
+  const fieldIds = config.fields.map(f => f.id).join(',');
   useEffect(() => {
-      const allLogsStr = localStorage.getItem('rpg_logs');
-      if (allLogsStr) {
-          const allLogs: SessionLog[] = JSON.parse(allLogsStr);
-          // Filter logs by current user and sort by date descending
-          const userLogs = allLogs
-            .filter(l => (l.author || 'Anônimo') === currentUser)
-            .sort((a, b) => b.timestamp - a.timestamp);
+      // Filter logs by current user and sort by date descending
+      const userLogs = logs
+        .filter(l => (l.author || 'Anônimo') === currentUser)
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      if (userLogs.length > 0) {
+          const lastData = userLogs[0].data;
           
-          if (userLogs.length > 0) {
-              const lastData = userLogs[0].data;
-              
-              // Restore Fields
-              const restoredFields: Record<string, any> = {};
-              config.fields.forEach(f => {
-                  if (lastData[f.id] !== undefined) {
-                      restoredFields[f.id] = lastData[f.id];
-                  }
-              });
-              setFormData(restoredFields);
-
-              // Restore Character Sheet (Inventory/Equipment)
-              if (lastData.characterSheet) {
-                  setCharacterState(lastData.characterSheet as CharacterSheetState);
+          // Restore Fields
+          const restoredFields: Record<string, any> = {};
+          config.fields.forEach(f => {
+              if (lastData[f.id] !== undefined) {
+                  restoredFields[f.id] = lastData[f.id];
               }
+          });
+          setFormData(restoredFields);
+
+          // Restore Character Sheet (Inventory/Equipment)
+          if (lastData.characterSheet) {
+              setCharacterState(lastData.characterSheet as CharacterSheetState);
           }
       }
-  }, [currentUser, config.fields]);
+  }, [currentUser, fieldIds]);
 
   const handleInputChange = (id: string, value: any) => {
     setFormData(prev => ({
@@ -121,8 +121,13 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
       author: currentUser
     };
 
-    onSaveLog(newLog);
-    alert("Sessão registrada com sucesso!");
+    try {
+        await onSaveLog(newLog);
+        alert("Sessão registrada com sucesso!");
+    } catch (e: any) {
+        console.error("Save failed", e);
+        alert(`Não foi possível salvar a sessão: ${e.message}`);
+    }
     // We do NOT clear form data here, so the player can continue editing for the next session/same session
   };
 

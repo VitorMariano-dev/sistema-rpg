@@ -1,15 +1,9 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  // Cast process to any to avoid TypeScript errors regarding cwd() on Vercel's node environment types
-  const env = loadEnv(mode, (process as any).cwd(), '');
-  return {
-    plugins: [react()],
-    define: {
-      // Garante que process.env.API_KEY esteja disponível no código do cliente
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY)
-    }
-  }
+// Só variáveis com prefixo VITE_ chegam ao navegador (import.meta.env).
+// A GEMINI_API_KEY fica apenas na Netlify Function.
+export default defineConfig({
+  plugins: [react()],
 })

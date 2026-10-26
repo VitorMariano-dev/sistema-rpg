@@ -7,9 +7,10 @@ interface NPCManagerProps {
   config: CampaignConfig;
   onUpdateConfig: (newConfig: CampaignConfig) => void;
   logs: SessionLog[]; 
+  players?: string[]; // Jogadores da campanha (vindos do banco)
 }
 
-const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs }) => {
+const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs, players }) => {
   // Form State
   const [name, setName] = useState('');
   const [description, setDescription] = useState(''); // GM Description
@@ -21,7 +22,7 @@ const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs })
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Derive unique players list for visibility toggling
-  const availablePlayers = Array.from(new Set(logs.map(log => log.author || 'Anônimo')));
+  const availablePlayers = players ?? Array.from(new Set(logs.map(log => log.author || 'Anônimo')));
 
   // Helper for Required Asterisk
   const Req = () => <span className="text-red-500 ml-1">*</span>;
