@@ -119,8 +119,15 @@ export interface CampaignConfig {
 export type UserRole = 'GM' | 'PLAYER';
 
 export interface User {
+  id: string;
   username: string;
-  password?: string;
+  role: UserRole; // Papel do usuário na campanha aberta
+}
+
+export interface CampaignSummary {
+  id: string;
+  title: string;
+  description: string;
   role: UserRole;
 }
 

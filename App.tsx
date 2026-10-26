@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Scroll, Settings, History, LayoutDashboard, Feather, LogOut, User as UserIcon, Users, Skull, BookOpen, Map } from 'lucide-react';
-import { CampaignConfig, SessionLog, ViewMode, User, FieldType, ResourceValue } from './types';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Scroll, Settings, History, LayoutDashboard, Feather, LogOut, Users, Skull, BookOpen, Map, Loader2, Copy, Swords } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
+import { CampaignConfig, SessionLog, ViewMode, User, FieldType, ResourceValue, UserRole } from './types';
 import FieldBuilder from './components/FieldBuilder';
 import SessionLogger from './components/SessionLogger';
 import CampaignAnalytics from './components/CampaignAnalytics';
@@ -9,6 +10,11 @@ import NPCManager from './components/NPCManager';
 import KnownNPCs from './components/KnownNPCs';
 import ResourceList from './components/ResourceList';
 import Auth from './components/Auth';
+import CampaignPicker from './components/CampaignPicker';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import {
+  loadCampaign, saveConfigChanges, insertSessionLog, deleteSessionLog, subscribeToCampaign,
+} from './services/campaignService';
 
 // Default initial config
 const INITIAL_CONFIG: CampaignConfig = {
@@ -18,62 +24,157 @@ const INITIAL_CONFIG: CampaignConfig = {
   npcs: []
 };
 
+const CAMPAIGN_KEY = 'rpg_campaign_id';
+
 const App: React.FC = () => {
   // --- State Management ---
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [username, setUsername] = useState('');
   const [view, setView] = useState<ViewMode>('dashboard');
-  
-  // Persisted State
-  const [config, setConfig] = useState<CampaignConfig>(() => {
-    const saved = localStorage.getItem('rpg_config');
-    return saved ? JSON.parse(saved) : INITIAL_CONFIG;
-  });
 
-  const [logs, setLogs] = useState<SessionLog[]>(() => {
-    const saved = localStorage.getItem('rpg_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [campaignId, setCampaignId] = useState<string | null>(() => localStorage.getItem(CAMPAIGN_KEY));
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [inviteCode, setInviteCode] = useState('');
+  const [players, setPlayers] = useState<string[]>([]);
+  const [config, setConfig] = useState<CampaignConfig>(INITIAL_CONFIG);
+  const [logs, setLogs] = useState<SessionLog[]>([]);
+  const [loadingCampaign, setLoadingCampaign] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
-  // Check for logged in user session on mount
+  const userId = session?.user.id;
+  const currentUser: User | null = session && role ? { id: session.user.id, username, role } : null;
+
+  // --- Auth ---
   useEffect(() => {
-      const savedUser = localStorage.getItem('rpg_current_session');
-      if (savedUser) {
-          const user = JSON.parse(savedUser);
-          // Ensure role exists for legacy data
-          if (!user.role) user.role = 'PLAYER';
-          setCurrentUser(user);
-      }
+    if (!isSupabaseConfigured) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  // --- Effects ---
   useEffect(() => {
-    localStorage.setItem('rpg_config', JSON.stringify(config));
-  }, [config]);
+    if (!session) { setUsername(''); return; }
+    supabase.from('profiles').select('username').eq('id', session.user.id).single().then(({ data }) => {
+      setUsername(data?.username || session.user.user_metadata?.username || session.user.email || '');
+    });
+  }, [session?.user.id]);
+
+  // --- Campaign persistence ---
+  // savedConfigRef guarda o que já está no banco; as edições do Mestre são
+  // agrupadas (debounce) e gravadas em sequência para não perder nada.
+  const savedConfigRef = useRef<CampaignConfig>(INITIAL_CONFIG);
+  const pendingConfigRef = useRef<CampaignConfig | null>(null);
+  const saveTimerRef = useRef<number>();
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const savingRef = useRef(false);
+
+  const refreshCampaign = useCallback(async (id: string, uid: string) => {
+    try {
+      const data = await loadCampaign(id, uid);
+      setRole(data.role);
+      setInviteCode(data.inviteCode);
+      setPlayers(data.players);
+      setLogs(data.logs);
+      // Não sobrescreve o que o Mestre está editando agora
+      if (!pendingConfigRef.current && !savingRef.current) {
+        savedConfigRef.current = data.config;
+        setConfig(data.config);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar campanha', e);
+      // Campanha apagada ou acesso removido: volta para a lista
+      localStorage.removeItem(CAMPAIGN_KEY);
+      setCampaignId(null);
+    }
+  }, []);
+
+  const flushConfig = useCallback(() => {
+    window.clearTimeout(saveTimerRef.current);
+    saveChainRef.current = saveChainRef.current.then(async () => {
+      const next = pendingConfigRef.current;
+      if (!next || !campaignId) return;
+      pendingConfigRef.current = null;
+      savingRef.current = true;
+      try {
+        await saveConfigChanges(campaignId, savedConfigRef.current, next);
+        savedConfigRef.current = next;
+        setSaveError('');
+      } catch (e: any) {
+        console.error('Erro ao salvar campanha', e);
+        setSaveError(`Não foi possível salvar: ${e.message}`);
+      } finally {
+        savingRef.current = false;
+      }
+    });
+    return saveChainRef.current;
+  }, [campaignId]);
 
   useEffect(() => {
-    localStorage.setItem('rpg_logs', JSON.stringify(logs));
-  }, [logs]);
+    if (!campaignId || !userId) return;
+    setLoadingCampaign(true);
+    setRole(null);
+    refreshCampaign(campaignId, userId).finally(() => setLoadingCampaign(false));
+
+    // Tempo real: qualquer mudança feita por outro membro recarrega a campanha
+    let timer: number | undefined;
+    const unsubscribe = subscribeToCampaign(campaignId, () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => refreshCampaign(campaignId, userId), 400);
+    });
+    return () => { window.clearTimeout(timer); unsubscribe(); };
+  }, [campaignId, userId, refreshCampaign]);
 
   // --- Handlers ---
-  const handleLogin = (user: User) => {
-      setCurrentUser(user);
-      localStorage.setItem('rpg_current_session', JSON.stringify(user));
+  const handleUpdateConfig = (next: CampaignConfig) => {
+    if (role !== 'GM') return;
+    setConfig(next);
+    pendingConfigRef.current = next;
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(flushConfig, 600);
   };
 
-  const handleLogout = () => {
-      setCurrentUser(null);
-      localStorage.removeItem('rpg_current_session');
-      setView('dashboard');
+  const handleOpenCampaign = (id: string) => {
+    localStorage.setItem(CAMPAIGN_KEY, id);
+    setView('dashboard');
+    setCampaignId(id);
   };
 
-  const handleSaveLog = (log: SessionLog) => {
-    setLogs(prev => [log, ...prev]);
-    // Stay on player log to confirm save, or optional redirect
-    // setView('history'); 
+  const handleSwitchCampaign = async () => {
+    await flushConfig();
+    localStorage.removeItem(CAMPAIGN_KEY);
+    setCampaignId(null);
+    setRole(null);
+    setView('dashboard');
   };
 
-  const handleDeleteLog = (id: string) => {
+  const handleLogout = async () => {
+    await flushConfig();
+    localStorage.removeItem(CAMPAIGN_KEY);
+    setCampaignId(null);
+    setRole(null);
+    setView('dashboard');
+    await supabase.auth.signOut();
+  };
+
+  const handleSaveLog = async (log: SessionLog) => {
+    if (!campaignId) return;
+    const saved = await insertSessionLog(campaignId, { ...log, author: username });
+    setLogs(prev => [saved, ...prev.filter(l => l.id !== saved.id)]);
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    try {
+      await deleteSessionLog(id);
       setLogs(prev => prev.filter(l => l.id !== id));
+    } catch (e: any) {
+      alert(`Não foi possível excluir: ${e.message}`);
+    }
   };
 
   // Helper to render log values
@@ -89,12 +190,12 @@ const App: React.FC = () => {
   };
 
   // --- Security Check ---
-  // Ensure players can't access GM views via state manipulation bugs
+  // A proteção real está nas políticas do banco (RLS); aqui só evitamos telas vazias
   useEffect(() => {
      if (currentUser?.role === 'PLAYER' && (view === 'gm-config' || view === 'gm-players' || view === 'gm-npcs')) {
          setView('dashboard');
      }
-  }, [view, currentUser]);
+  }, [view, currentUser?.role]);
 
   // --- Main Content Render ---
   const renderContent = () => {
@@ -103,13 +204,24 @@ const App: React.FC = () => {
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
              <div className="col-span-1 md:col-span-2 text-center py-10">
-                <h1 className="text-5xl font-bold cinzel text-amber-500 mb-4 drop-shadow-md">Crônicas de Mesa</h1>
+                <h1 className="text-5xl font-bold cinzel text-amber-500 mb-4 drop-shadow-md">{config.title || 'Crônicas de Mesa'}</h1>
                 <p className="text-xl text-slate-400">
                     Bem-vindo, {currentUser?.username}. 
                     <span className="ml-2 text-xs uppercase tracking-widest border border-slate-700 rounded px-2 py-0.5 text-slate-500">
                         {currentUser?.role === 'GM' ? 'Mestre' : 'Jogador'}
                     </span>
                 </p>
+                {currentUser?.role === 'GM' && inviteCode && (
+                    <button
+                        onClick={() => navigator.clipboard?.writeText(inviteCode)}
+                        title="Copiar código"
+                        className="mt-4 inline-flex items-center gap-2 text-sm text-slate-400 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 hover:border-amber-500/50"
+                    >
+                        Código de convite para os jogadores:
+                        <span className="font-mono tracking-widest text-amber-400">{inviteCode}</span>
+                        <Copy className="w-4 h-4" />
+                    </button>
+                )}
              </div>
 
              {/* GM Only: Config Button */}
@@ -183,7 +295,7 @@ const App: React.FC = () => {
       case 'gm-config':
         // Double check permissions in render
         if (currentUser?.role !== 'GM') return <div className="p-10 text-center text-red-500">Acesso Negado</div>;
-        return <FieldBuilder config={config} onUpdateConfig={setConfig} logs={logs} />;
+        return <FieldBuilder config={config} onUpdateConfig={handleUpdateConfig} logs={logs} players={players} />;
       
       case 'gm-players':
         if (currentUser?.role !== 'GM') return <div className="p-10 text-center text-red-500">Acesso Negado</div>;
@@ -191,10 +303,10 @@ const App: React.FC = () => {
       
       case 'gm-npcs':
         if (currentUser?.role !== 'GM') return <div className="p-10 text-center text-red-500">Acesso Negado</div>;
-        return <NPCManager config={config} onUpdateConfig={setConfig} logs={logs} />;
+        return <NPCManager config={config} onUpdateConfig={handleUpdateConfig} logs={logs} players={players} />;
 
       case 'player-log':
-        return <SessionLogger config={config} onSaveLog={handleSaveLog} currentUser={currentUser?.username || 'Anônimo'} />;
+        return <SessionLogger config={config} onSaveLog={handleSaveLog} currentUser={currentUser.username} logs={logs} />;
 
       case 'player-npcs':
         return <KnownNPCs config={config} currentUser={currentUser?.username || ''} />;
@@ -281,8 +393,31 @@ const App: React.FC = () => {
     }
   };
 
-  if (!currentUser) {
-      return <Auth onLogin={handleLogin} />;
+  if (!isSupabaseConfigured) {
+      return (
+        <FullScreenMessage>
+          <h1 className="text-2xl font-bold cinzel text-amber-500 mb-2">Configuração pendente</h1>
+          <p className="text-slate-400">
+            Defina <code className="text-amber-400">VITE_SUPABASE_URL</code> e <code className="text-amber-400">VITE_SUPABASE_ANON_KEY</code> (veja o README) e gere o build de novo.
+          </p>
+        </FullScreenMessage>
+      );
+  }
+
+  if (!authReady) {
+      return <FullScreenMessage><Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto" /></FullScreenMessage>;
+  }
+
+  if (!session) {
+      return <Auth />;
+  }
+
+  if (!campaignId) {
+      return <CampaignPicker userId={session.user.id} username={username} onOpen={handleOpenCampaign} onLogout={handleLogout} />;
+  }
+
+  if (!currentUser || loadingCampaign) {
+      return <FullScreenMessage><Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto" /></FullScreenMessage>;
   }
 
   return (
@@ -360,6 +495,14 @@ const App: React.FC = () => {
               />
               
               <div className="h-6 w-px bg-slate-700 mx-2"></div>
+              <button
+                onClick={handleSwitchCampaign}
+                className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-amber-400 transition-colors text-sm font-medium"
+                title="Trocar de campanha"
+              >
+                  <Swords className="w-4 h-4" />
+                  <span className="hidden lg:inline">Campanhas</span>
+              </button>
               <button 
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-red-400 transition-colors text-sm font-medium"
@@ -375,12 +518,21 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {saveError && (
+            <p className="mb-6 text-red-400 text-sm text-center bg-red-950/30 p-2 rounded border border-red-900/50">{saveError}</p>
+        )}
         {renderContent()}
       </main>
 
     </div>
   );
 };
+
+const FullScreenMessage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+        <div className="max-w-md text-center">{children}</div>
+    </div>
+);
 
 // Sub-component for nav buttons
 const NavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
