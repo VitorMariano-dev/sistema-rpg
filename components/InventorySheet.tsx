@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { InventoryItem, Equipment, CharacterSheetState, ItemCategory, CurrencyType } from '../types';
-import { Backpack, Shirt, Shield, Footprints, Weight, Plus, Trash2, X, Edit2, Hammer, Coins, AlertCircle } from 'lucide-react';
+import { Backpack, Shirt, Shield, Footprints, Weight, Plus, X, Edit2, Hammer, Coins, AlertCircle } from 'lucide-react';
 
 interface InventorySheetProps {
   state: CharacterSheetState;
@@ -95,7 +95,10 @@ const InventorySheet: React.FC<InventorySheetProps> = ({ state, onChange, curren
           return;
       }
 
+      // Mantém campos que o formulário não edita (ex.: notes) ao salvar uma edição
+      const existing = editingId ? state.inventory.find(i => i.id === editingId) : undefined;
       const itemData: InventoryItem = {
+          ...existing,
           id: editingId || crypto.randomUUID(),
           name,
           weight: parseFloat(weight) || 0,

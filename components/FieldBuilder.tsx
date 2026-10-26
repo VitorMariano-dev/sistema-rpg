@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Wand2, Loader2, Link as LinkIcon, Coins, FormInput, Map, FileText, MessageCircle, Globe, Lock, Unlock, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Wand2, Loader2, Link as LinkIcon, Coins, FormInput, Map, FileText, MessageCircle, Globe, Lock, Eye, EyeOff } from 'lucide-react';
 import { CampaignConfig, CustomField, FieldType, ExternalLink, CurrencyType, SessionLog } from '../types';
 import { suggestCampaignFields, generateDocumentContent } from '../services/geminiService';
+import { getKnownPlayers } from '../utils';
 
 interface FieldBuilderProps {
   config: CampaignConfig;
@@ -17,7 +18,7 @@ const FieldBuilder: React.FC<FieldBuilderProps> = ({ config, onUpdateConfig, log
   const [promptTheme, setPromptTheme] = useState('');
   
   // Players list
-  const availablePlayers = Array.from(new Set(logs.map(log => log.author || 'Anônimo')));
+  const availablePlayers = getKnownPlayers(logs);
 
   // Field Form State
   const [newFieldLabel, setNewFieldLabel] = useState('');
@@ -67,6 +68,8 @@ const FieldBuilder: React.FC<FieldBuilderProps> = ({ config, onUpdateConfig, log
       if (suggestedFields.length > 0) {
         onUpdateConfig({ ...config, fields: [...config.fields, ...suggestedFields] });
       }
+    } catch (error) {
+      alert((error as Error).message);
     } finally {
       setIsGenerating(false);
     }
@@ -133,6 +136,8 @@ const FieldBuilder: React.FC<FieldBuilderProps> = ({ config, onUpdateConfig, log
       try {
           const text = await generateDocumentContent(docKeywords, resourceCategory);
           setResourceContent(text);
+      } catch (error) {
+          alert((error as Error).message);
       } finally {
           setIsGeneratingDoc(false);
       }
@@ -172,6 +177,15 @@ const FieldBuilder: React.FC<FieldBuilderProps> = ({ config, onUpdateConfig, log
                     onChange={(e) => onUpdateConfig({...config, title: e.target.value})}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="ex: A Maldição de Strahd"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Descrição da Campanha</label>
+                <textarea
+                    value={config.description}
+                    onChange={(e) => onUpdateConfig({...config, description: e.target.value})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-100 focus:ring-2 focus:ring-amber-500 focus:outline-none min-h-[80px]"
+                    placeholder="ex: Os heróis chegam à vila de Barovia envoltos em névoa..."
                 />
             </div>
         </div>

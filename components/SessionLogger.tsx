@@ -3,6 +3,7 @@ import { Save, Loader2, Sparkles, Heart } from 'lucide-react';
 import { CampaignConfig, SessionLog, FieldType, ResourceValue, CharacterSheetState, SessionData } from '../types';
 import { summarizeSessionLog } from '../services/geminiService';
 import InventorySheet from './InventorySheet';
+import { updateResource, parseNumberInput } from '../utils';
 
 interface SessionLoggerProps {
   config: CampaignConfig;
@@ -68,42 +69,23 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
   };
 
   const handleResourceChange = (id: string, field: 'current' | 'max', value: string) => {
-    setFormData(prev => {
-        const currentResource = prev[id] as ResourceValue || { current: 0, max: 0 };
-        const numValue = Number(value);
-        
-        let newCurrent = currentResource.current;
-        let newMax = currentResource.max;
-
-        if (field === 'max') {
-            newMax = numValue;
-            // If max drops below current, clamp current
-            if (newCurrent > newMax) newCurrent = newMax;
-        } else {
-            // If setting current, clamp to max
-            newCurrent = numValue;
-            if (newCurrent > newMax) newCurrent = newMax;
-        }
-
-        return {
-            ...prev,
-            [id]: {
-                current: newCurrent,
-                max: newMax
-            }
-        }
-    });
+    setFormData(prev => ({
+        ...prev,
+        [id]: updateResource(prev[id] as ResourceValue | undefined, field, Number(value))
+    }));
   };
 
   const handleSave = async () => {
     // Allows saving even if fields are empty, but inventory might have changed
     
-    let summary = "";
+    let summary: string | undefined;
+    let summaryError: string | null = null;
     setIsSummarizing(true);
     try {
-        summary = await summarizeSessionLog(formData, config.fields);
+        summary = (await summarizeSessionLog(formData, config.fields)) || undefined;
     } catch(e) {
-        console.error("AI Summary failed", e);
+        // Não grava a mensagem de erro como resumo; a sessão é salva sem resumo.
+        summaryError = (e as Error).message;
     } finally {
         setIsSummarizing(false);
     }
@@ -122,12 +104,15 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
     };
 
     onSaveLog(newLog);
-    alert("Sessão registrada com sucesso!");
+    alert(summaryError
+        ? `Sessão registrada, mas sem resumo da IA: ${summaryError}`
+        : "Sessão registrada com sucesso!");
     // We do NOT clear form data here, so the player can continue editing for the next session/same session
   };
 
   const renderResourceField = (fieldId: string, label: string) => {
-      const resource = (formData[fieldId] as ResourceValue) || { current: 0, max: 0 };
+      const stored = formData[fieldId] as ResourceValue | undefined;
+      const resource = stored || { current: 0, max: 0 };
       const percentage = resource.max > 0 ? Math.min(100, Math.max(0, (resource.current / resource.max) * 100)) : 0;
       
       let barColor = 'bg-emerald-500';
@@ -156,7 +141,7 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
                       <input 
                         type="number"
                         className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white font-mono text-center focus:border-amber-500 outline-none"
-                        value={resource.current || ''}
+                        value={stored ? stored.current : ''}
                         onChange={(e) => handleResourceChange(fieldId, 'current', e.target.value)}
                         placeholder="0"
                       />
@@ -167,7 +152,7 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
                       <input 
                         type="number"
                         className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-400 font-mono text-center focus:border-amber-500 outline-none"
-                        value={resource.max || ''}
+                        value={stored ? stored.max : ''}
                         onChange={(e) => handleResourceChange(fieldId, 'max', e.target.value)}
                         placeholder="0"
                       />
@@ -234,8 +219,8 @@ const SessionLogger: React.FC<SessionLoggerProps> = ({ config, onSaveLog, curren
                             type="number"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-100 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
                             placeholder="0"
-                            value={formData[field.id] || ''}
-                            onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            value={formData[field.id] ?? ''}
+                            onChange={(e) => handleInputChange(field.id, parseNumberInput(e.target.value))}
                         />
                     )}
 

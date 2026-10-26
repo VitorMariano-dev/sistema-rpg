@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Scroll, Settings, History, LayoutDashboard, Feather, LogOut, User as UserIcon, Users, Skull, BookOpen, Map } from 'lucide-react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { Scroll, Settings, History, LayoutDashboard, Feather, LogOut, Users, Skull, BookOpen, Map } from 'lucide-react';
 import { CampaignConfig, SessionLog, ViewMode, User, FieldType, ResourceValue } from './types';
-import FieldBuilder from './components/FieldBuilder';
-import SessionLogger from './components/SessionLogger';
-import CampaignAnalytics from './components/CampaignAnalytics';
-import PlayerInspector from './components/PlayerInspector';
-import NPCManager from './components/NPCManager';
-import KnownNPCs from './components/KnownNPCs';
-import ResourceList from './components/ResourceList';
 import Auth from './components/Auth';
+import { hasValue } from './utils';
+
+// Telas carregadas sob demanda para reduzir o tamanho do carregamento inicial
+const FieldBuilder = lazy(() => import('./components/FieldBuilder'));
+const SessionLogger = lazy(() => import('./components/SessionLogger'));
+const CampaignAnalytics = lazy(() => import('./components/CampaignAnalytics'));
+const PlayerInspector = lazy(() => import('./components/PlayerInspector'));
+const NPCManager = lazy(() => import('./components/NPCManager'));
+const KnownNPCs = lazy(() => import('./components/KnownNPCs'));
+const ResourceList = lazy(() => import('./components/ResourceList'));
 
 // Default initial config
 const INITIAL_CONFIG: CampaignConfig = {
@@ -175,7 +178,7 @@ const App: React.FC = () => {
 
              {/* Inline quick stats */}
              <div className="col-span-1 md:col-span-2">
-                 <CampaignAnalytics logs={logs} fields={config.fields} />
+                 <CampaignAnalytics logs={logs} fields={config.fields} currentUser={currentUser?.username} />
              </div>
           </div>
         );
@@ -246,7 +249,7 @@ const App: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {config.fields.map(field => {
                                 // Only show non-empty fields
-                                if (!log.data[field.id]) return null;
+                                if (!hasValue(log.data[field.id])) return null;
                                 return (
                                     <div key={field.id} className="bg-slate-950/50 p-3 rounded border border-slate-800/50">
                                         <span className="text-xs text-slate-500 uppercase block mb-1">{field.label}</span>
@@ -375,7 +378,9 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {renderContent()}
+        <Suspense fallback={<div className="py-20 text-center text-slate-500">Carregando...</div>}>
+          {renderContent()}
+        </Suspense>
       </main>
 
     </div>

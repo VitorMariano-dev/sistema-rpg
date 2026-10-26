@@ -1,20 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Crônicas de Mesa
 
-# Run and deploy your AI Studio app
+Gerenciador de campanhas de RPG: o Mestre define os campos da ficha, NPCs, links, documentos e moedas; os jogadores registram suas sessões com inventário e equipamentos. A IA (Google Gemini) sugere campos, gera descrições de NPCs, documentos e resumos de sessão.
 
-This contains everything you need to run your app locally.
+> Os dados ainda ficam no `localStorage` do navegador, então Mestre e jogadores precisam usar o mesmo navegador por enquanto. A migração para um backend (Supabase) está planejada.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1zlB4P6y4sU_VJC7frq9PWu-j01i6zBVG
+## Rodar localmente
 
-## Run Locally
+**Pré-requisito:** Node.js 22+
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
+1. Instale as dependências:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Crie um arquivo `.env.local` com a sua chave do Gemini:
+   `GEMINI_API_KEY=sua-chave`
+3. Rode o app:
    `npm run dev`
+
+Sem a chave o app funciona normalmente; só os recursos de IA mostram um aviso.
+
+## Comandos
+
+| Comando | O que faz |
+| --- | --- |
+| `npm run dev` | Servidor de desenvolvimento |
+| `npm run build` | Build de produção em `dist/` |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | Checagem de tipos do TypeScript |
+| `npm test` | Testes (Vitest) |
+
+## IA e a chave da API
+
+As chamadas ao Gemini são feitas no servidor, pela função `netlify/functions/gemini.ts` (o código fica em `server/gemini.ts`). Assim a chave nunca vai para o navegador. Em desenvolvimento, o próprio Vite responde no mesmo endereço usando esse código.
+
+## Deploy no Netlify
+
+O `netlify.toml` já configura o build e a função. No painel do Netlify, em **Site configuration › Environment variables**, defina `GEMINI_API_KEY`.

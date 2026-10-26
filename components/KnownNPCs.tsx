@@ -1,6 +1,6 @@
 import React from 'react';
-import { Skull, Heart, Zap, User, Search } from 'lucide-react';
-import { CampaignConfig, NPC } from '../types';
+import { Skull, User, Search } from 'lucide-react';
+import { CampaignConfig } from '../types';
 
 interface KnownNPCsProps {
   config: CampaignConfig;
