@@ -2,7 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Estilos globais adicionais se necessário */
-body {
-  background-color: #020617; /* bg-slate-950 fallback */
+@layer base {
+  body {
+    background-color: #020617; /* bg-slate-950 fallback */
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@layer utilities {
+  .cinzel {
+    @apply font-serif;
+  }
 }

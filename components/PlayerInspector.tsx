@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, SessionLog, CustomField, FieldType, ResourceValue } from '../types';
+import { SessionLog, CustomField, FieldType, ResourceValue } from '../types';
 import { Shield, Scroll, Activity, Calendar } from 'lucide-react';
 
 interface PlayerInspectorProps {

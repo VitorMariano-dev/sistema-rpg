@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Skull, Heart, HelpCircle, User, Eye, EyeOff, Zap, Wand2, Loader2, FileText, Lock } from 'lucide-react';
+import { Plus, Trash2, Skull, Heart, HelpCircle, User, Eye, Wand2, Loader2, Lock } from 'lucide-react';
 import { CampaignConfig, NPC, NPCCategory, SessionLog, ResourceValue } from '../types';
 import { generateNPCDescriptions } from '../services/geminiService';
+import { getKnownPlayers } from '../utils';
 
 interface NPCManagerProps {
   config: CampaignConfig;
@@ -21,7 +22,7 @@ const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs })
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Derive unique players list for visibility toggling
-  const availablePlayers = Array.from(new Set(logs.map(log => log.author || 'Anônimo')));
+  const availablePlayers = getKnownPlayers(logs);
 
   // Helper for Required Asterisk
   const Req = () => <span className="text-red-500 ml-1">*</span>;
@@ -115,6 +116,8 @@ const NPCManager: React.FC<NPCManagerProps> = ({ config, onUpdateConfig, logs })
           const result = await generateNPCDescriptions(name, description || "Fantasia medieval padrão");
           setDescription(result.gmDescription);
           setPublicDescription(result.publicDescription);
+      } catch (error) {
+          alert((error as Error).message);
       } finally {
           setIsGenerating(false);
       }
